@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Login - SymptoCare</title>
+    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="login.css">
+</head>
+<body>
+    <div class="login-container">
+        <div class="login-box">
+            <h1>Welcome to SymptoCare</h1>
+            <p>Please select your role to continue.</p>
+
+            <div class="role-selector">
+                <input type="radio" id="role-patient" name="role" value="patient" checked>
+                <label for="role-patient">I am a Patient</label>
+                <input type="radio" id="role-doctor" name="role" value="doctor">
+                <label for="role-doctor">I am a Doctor</label>
+            </div>
+
+            <!-- Patient Login Form -->
+            <form id="patient-login-form" class="login-form">
+                <div class="form-group">
+                    <label for="patient-select">Select Your Profile</label>
+                    <select id="patient-select" required>
+                        <option value="">-- Loading Patients --</option>
+                    </select>
+                </div>
+                <button type="submit">Login as Patient</button>
+                <p class="or-divider">or</p>
+                <button type="button" id="create-patient-btn">Create New Patient Profile</button>
+            </form>
+
+            <!-- Doctor Login Form -->
+            <form id="doctor-login-form" class="login-form hidden">
+                <div class="form-group">
+                    <label for="doctor-login-select">Select Your Profile</label>
+                    <select id="doctor-login-select" required>
+                        <option value="">-- Loading Doctors --</option>
+                    </select>
+                </div>
+                <button type="submit">Login as Doctor</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- New Patient Modal -->
+    <div id="new-patient-modal" class="modal-overlay hidden">
+        <div class="modal-content">
+            <button id="modal-close" class="modal-close">&times;</button>
+            <h3>Create New Patient Profile</h3>
+            <form id="new-patient-form">
+                <div class="form-group"><label for="new-patient-name">Full Name</label><input type="text" id="new-patient-name" required></div>
+                <div class="form-group"><label for="new-patient-age">Age</label><input type="number" id="new-patient-age" required></div>
+                <div class="form-group"><label for="new-patient-gender">Gender</label><select id="new-patient-gender" required><option value="M">Male</option><option value="F">Female</option><option value="O">Other</option></select></div>
+                <div class="form-group"><label for="new-patient-phone">Phone Number</label><input type="tel" id="new-patient-phone" required></div>
+                <div class="form-group"><label for="new-patient-address">Address (Optional)</label><input type="text" id="new-patient-address"></div>
+                <button type="submit">Create Profile & Login</button>
+            </form>
+        </div>
+    </div>
+
+    <script src="login.js"></script>
+</body>
+</html>
