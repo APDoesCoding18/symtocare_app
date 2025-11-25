@@ -15,6 +15,8 @@ document.addEventListener('DOMContentLoaded', () => {
   const searchView = document.getElementById('search-view');
   const appointmentsView = document.getElementById('appointments-view');
   const doctorDashboardView = document.getElementById('doctor-dashboard-view');
+  const inboxView = document.getElementById('inbox-view');
+  const patientAppointmentsList = document.getElementById('patient-appointments-list');
 
   // Dashboard elements
   const doctorSelect = document.getElementById('doctor-select');
@@ -26,6 +28,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const cityInput = document.getElementById('city');
   const symptomsInput = document.getElementById('symptoms');
   const resultsContainer = document.getElementById('results');
+  const inboxMessagesList = document.getElementById('inbox-messages-list');
 
   // --- Core Functions ---
 
@@ -99,18 +102,18 @@ document.addEventListener('DOMContentLoaded', () => {
   // 4. Fetch and display appointments
   async function loadAppointments() {
     if (currentUser.type !== 'patient') return;
-    appointmentsView.innerHTML = '<h2>My Appointments</h2><p class="message">Loading appointments...</p>';
+    patientAppointmentsList.innerHTML = '<p class="message">Loading appointments...</p>';
     try {
       const res = await fetch(`${API_BASE_URL}/appointments?patientId=${currentUser.id}`);
       const appointments = await res.json();
 
       if (!appointments || appointments.length === 0) {
-        appointmentsView.innerHTML = '<h2>My Appointments</h2><p class="message">You have no upcoming or past appointments.</p>';
+        patientAppointmentsList.innerHTML = '<p class="message">You have no upcoming or past appointments.</p>';
         return;
       }
 
       // Clear loading message
-      appointmentsView.innerHTML = '<h2>My Appointments</h2>';
+      patientAppointmentsList.innerHTML = '';
 
       appointments.forEach(appt => {
         const card = document.createElement('div');
@@ -121,17 +124,29 @@ document.addEventListener('DOMContentLoaded', () => {
           <p><strong>Doctor:</strong> ${appt.doctor_name}</p>
           <p><strong>Date:</strong> ${appointmentDate}</p>
           <p><strong>Time:</strong> ${appt.time_slot}</p>
-          <p><strong>Status:</strong> <span class="status">${appt.status}</span></p>
-          ${(appt.status === 'Completed' && !appt.has_rated) ? 
-            `<button class="review-btn" data-doctor-id="${appt.doctor_id}" data-doctor-name="${appt.doctor_name}">Leave a Review</button>` : ''
+          <p><strong>Status:</strong> <span class="status">${appt.status}</span></p>`;
+
+        // Lab Test Section for Patient
+        if (appt.lab_test_status === 'Requested') {
+            card.innerHTML += `<div class="lab-test-info requested">
+                <p><strong>Lab Test Requested:</strong> ${appt.test_name}</p>
+                <button class="upload-lab-btn" data-labtest-id="${appt.labtest_id}">Upload Report</button>
+            </div>`;
+        } else if (appt.lab_test_status === 'Submitted') {
+            card.innerHTML += `<p class="lab-test-info submitted"><strong>Lab Test:</strong> Report Submitted</p>`;
+        }
+
+        // Review Button
+        if (appt.status === 'Completed' && !appt.has_rated) {
+            card.innerHTML += `<button class="review-btn" data-doctor-id="${appt.doctor_id}" data-doctor-name="${appt.doctor_name}">Leave a Review</button>`;
           }
-        `;
-        appointmentsView.appendChild(card);
+        ;
+        patientAppointmentsList.appendChild(card);
       });
 
     } catch (error) {
       console.error('Failed to load appointments:', error);
-      appointmentsView.innerHTML = '<h2>My Appointments</h2><p class="message">Could not load appointments. Please try again later.</p>';
+      patientAppointmentsList.innerHTML = '<p class="message">Could not load appointments. Please try again later.</p>';
     }
   }
 
@@ -178,8 +193,26 @@ document.addEventListener('DOMContentLoaded', () => {
           <p><strong>Patient Phone:</strong> ${appt.patient_phone || 'N/A'}</p>
           <p><strong>Date:</strong> ${appointmentDate}</p>
           <p><strong>Time:</strong> ${appt.time_slot}</p>
-          <p><strong>Status:</strong> <span class="status" value="${appt.status}">${appt.status}</span></p>
-        `;
+          <p><strong>Status:</strong> <span class="status" value="${appt.status}">${appt.status}</span></p>`;
+
+        // Lab Test Section for Doctor
+        if (appt.status === 'Confirmed' || appt.status === 'Completed') {
+            if (appt.lab_test_status === 'Requested') {
+                card.innerHTML += `<p class="lab-test-info requested"><strong>Lab Test:</strong> Requested (${appt.test_name})</p>`;
+            } else if (appt.lab_test_status === 'Submitted') {
+                card.innerHTML += `<div class="lab-test-info submitted">
+                    <p><strong>Lab Test:</strong> Report Submitted for "${appt.test_name}"</p>
+                    <button class="view-lab-btn" data-result="${appt.lab_test_result}" data-test-date="${appt.lab_test_date}">View Report</button>
+                    <div class="lab-result-display hidden"></div>
+                </div>`;
+            } else {
+                card.innerHTML += `<button class="request-lab-btn" data-appointment-id="${appt.appointment_id}">Request Lab Report</button>`;
+            }
+        }
+        // The cancel button should only show for appointments that are not yet completed or cancelled.
+        if (appt.status === 'Confirmed' || appt.status === 'Pending') {
+            card.innerHTML += `<button class="cancel-btn" data-appointment-id="${appt.appointment_id}">Cancel Appointment</button>`;
+        }
         doctorAppointmentsList.appendChild(card);
       });
 
@@ -189,6 +222,59 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
 
+  // Add availability form to the doctor dashboard
+  function showAddAvailabilityForm() {
+    const formHtml = `
+        <div class="card" id="availability-form-container">
+            <h3>Add Your Available Time Slots</h3>
+            <form id="add-availability-form">
+                <div class="form-group">
+                    <label for="avail-date">Date</label>
+                    <input type="date" id="avail-date" name="availableDate" required>
+                </div>
+                <div class="form-group">
+                    <label for="avail-start-time">Start Time</label>
+                    <input type="time" id="avail-start-time" name="startTime" required>
+                </div>
+                <div class="form-group">
+                    <label for="avail-end-time">End Time</label>
+                    <input type="time" id="avail-end-time" name="endTime" required>
+                </div>
+                <button type="submit">Add Slots</button>
+            </form>
+        </div>`;
+    doctorDashboardView.insertAdjacentHTML('afterbegin', formHtml);
+  }
+
+  // 4c. Load inbox messages
+  async function loadInboxMessages() {
+    if (currentUser.type !== 'patient') return;
+    inboxMessagesList.innerHTML = '<p class="message">Loading messages...</p>';
+    try {
+        const res = await fetch(`${API_BASE_URL}/inbox/${currentUser.id}`);
+        const messages = await res.json();
+
+        if (!messages || messages.length === 0) {
+            inboxMessagesList.innerHTML = '<p class="message">You have no messages.</p>';
+            return;
+        }
+
+        inboxMessagesList.innerHTML = '';
+        messages.forEach(msg => {
+            const card = document.createElement('div');
+            card.className = 'appointment-card'; // Reuse style for consistency
+            const receivedDate = new Date(msg.received_at).toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short' });
+            card.innerHTML = `
+                <p>${msg.Pmsg}</p>
+                <p><small><strong>Received:</strong> ${receivedDate}</small></p>
+            `;
+            inboxMessagesList.appendChild(card);
+        });
+    } catch (error) {
+        console.error('Failed to load inbox:', error);
+        inboxMessagesList.innerHTML = '<p class="error">Could not load messages.</p>';
+    }
+  }
 
   // --- Event Listeners ---
 
@@ -202,18 +288,30 @@ document.addEventListener('DOMContentLoaded', () => {
       if (link.id === 'nav-search') {
         searchView.classList.remove('hidden');
         appointmentsView.classList.add('hidden');
+        inboxView.classList.add('hidden');
         doctorDashboardView.classList.add('hidden');
       } else if (link.id === 'nav-appointments') {
         searchView.classList.add('hidden');
         appointmentsView.classList.remove('hidden');
+        inboxView.classList.add('hidden');
         doctorDashboardView.classList.add('hidden');
         loadAppointments(); // Fetch appointments when tab is clicked
+      } else if (link.id === 'nav-inbox') {
+        searchView.classList.add('hidden');
+        appointmentsView.classList.add('hidden');
+        inboxView.classList.remove('hidden');
+        doctorDashboardView.classList.add('hidden');
+        loadInboxMessages();
       } else if (link.id === 'nav-dashboard') {
         searchView.classList.add('hidden');
         appointmentsView.classList.add('hidden');
+        inboxView.classList.add('hidden');
         doctorDashboardView.classList.remove('hidden');
         loadDoctorsForDashboard(); // Fetch doctor list
-        loadDoctorAppointments(null); // Show initial message
+        // Clear the list initially
+        doctorAppointmentsList.innerHTML = '<p class="message">Please select your name from the dropdown to see appointments.</p>';
+      } else if (link.id === 'nav-profile') {
+        window.location.href = link.href; // Allow navigation to profile page
       }
     });
   });
@@ -226,15 +324,81 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 
   // 7. Handle "Leave a Review" clicks
-  appointmentsView.addEventListener('click', (event) => {
+  patientAppointmentsList.addEventListener('click', (event) => {
     if (event.target.classList.contains('review-btn')) {
       showReviewForm(event.target);
+    }
+    // Handle "Upload Lab Report" clicks
+    if (event.target.classList.contains('upload-lab-btn')) {
+        showLabUploadForm(event.target);
     }
   });
 
   // 8. Handle doctor selection in dashboard
   doctorSelect.addEventListener('change', (event) => {
     loadDoctorAppointments(event.target.value);
+  });
+
+  // Handle doctor appointment actions (cancellation)
+  doctorAppointmentsList.addEventListener('click', async (event) => {
+    if (event.target.classList.contains('cancel-btn')) { // Cancel Appointment
+        if (!confirm('Are you sure you want to cancel this appointment?')) {
+            return;
+        }
+
+        const appointmentId = event.target.dataset.appointmentId;
+        try {
+            const res = await fetch(`${API_BASE_URL}/appointments/${appointmentId}/cancel`, {
+                method: 'PUT'
+            });
+            const result = await res.json();
+            alert(result.message);
+            if (res.ok) {
+                loadDoctorAppointments(doctorSelect.value); // Refresh the list
+            }
+        } catch (error) {
+            alert('Failed to cancel appointment.');
+        }
+    } else if (event.target.classList.contains('request-lab-btn')) { // Request Lab Test
+        const appointmentId = event.target.dataset.appointmentId;
+        const testName = prompt("Please enter the name of the lab test to request:");
+
+        if (testName) {
+            try {
+                const res = await fetch(`${API_BASE_URL}/labtests/request`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ appointmentId, testName })
+                });
+                const result = await res.json();
+                alert(result.message || result.error);
+                if (res.ok) {
+                    loadDoctorAppointments(doctorSelect.value); // Refresh list
+                }
+            } catch (error) {
+                console.error('Error requesting lab test:', error);
+                alert('An error occurred while requesting the lab test.');
+            }
+        }
+    } else if (event.target.classList.contains('view-lab-btn')) { // View Lab Report
+        const button = event.target;
+        const resultDisplay = button.nextElementSibling;
+        
+        if (resultDisplay.classList.contains('hidden')) {
+            const result = button.dataset.result;
+            const testDate = new Date(button.dataset.testDate).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
+            resultDisplay.innerHTML = `
+                <p><strong>Test Date:</strong> ${testDate}</p>
+                <p><strong>Result/Summary:</strong></p>
+                <pre>${result}</pre>
+            `;
+            resultDisplay.classList.remove('hidden');
+            button.textContent = 'Hide Report';
+        } else {
+            resultDisplay.classList.add('hidden');
+            button.textContent = 'View Report';
+        }
+    }
   });
 
   // 9. Handle Logout
@@ -252,46 +416,62 @@ document.addEventListener('DOMContentLoaded', () => {
     const doctorId = button.dataset.doctorId;
     const originalContent = card.innerHTML;
 
-    // Create the inline form
-    const formHtml = `
-      <div class="inline-form">
-        <h4>Book Appointment for ${currentUser.name}</h4>
-        <form class="booking-form-inline">
-          <input type="hidden" name="doctorId" value="${doctorId}">
-          <input type="hidden" name="patientId" value="${currentUser.id}">
-          <div class="form-group">
-            <label for="app-date-${doctorId}">Date</label>
-            <input type="date" id="app-date-${doctorId}" name="appointmentDate" required>
-          </div>
-          <div class="form-group">
-            <label for="app-time-${doctorId}">Time Slot</label>
-            <select id="app-time-${doctorId}" name="timeSlot" required>
-              <option value="09:00 - 10:00">09:00 - 10:00</option>
-              <option value="10:00 - 11:00">10:00 - 11:00</option>
-              <option value="11:00 - 12:00">11:00 - 12:00</option>
-              <option value="14:00 - 15:00">14:00 - 15:00</option>
-            </select>
-          </div>
-          <div class="inline-form-actions">
-            <button type="submit">Confirm</button>
-            <button type="button" class="cancel-btn">Cancel</button>
-          </div>
-        </form>
-      </div>
-    `;
-
-    // Replace button with form
     button.style.display = 'none';
+    card.insertAdjacentHTML('beforeend', '<div class="inline-form"><p>Loading available slots...</p></div>');
+
+    // Fetch available slots
+    const res = await fetch(`${API_BASE_URL}/doctors/${doctorId}/availability`);
+    const slots = await res.json();
+
+    let formHtml;
+    if (slots.length === 0) {
+        formHtml = `<div class="inline-form"><p>This doctor has no available slots.</p><button type="button" class="cancel-btn">Close</button></div>`;
+    } else {
+        const slotOptions = slots.map(slot => {
+            const date = new Date(slot.available_date).toLocaleDateString('en-CA'); // YYYY-MM-DD
+            const startTime = slot.start_time.substring(0, 5);
+            const endTime = slot.end_time.substring(0, 5);
+            return `<option value="${slot.availability_id}">${date} at ${startTime} - ${endTime}</option>`;
+        }).join('');
+
+        formHtml = `
+          <div class="inline-form">
+            <h4>Select an Available Slot</h4>
+            <form class="booking-form-inline">
+              <input type="hidden" name="doctorId" value="${doctorId}">
+              <div class="form-group">
+                <label for="app-slot-${doctorId}">Available Slots</label>
+                <select id="app-slot-${doctorId}" name="availabilityId" required>
+                  <option value="">-- Please select a time --</option>
+                  ${slotOptions}
+                </select>
+              </div>
+              <div class="inline-form-actions">
+                <button type="submit">Confirm</button>
+                <button type="button" class="cancel-btn">Cancel</button>
+              </div>
+            </form>
+          </div>
+        `;
+    }
+
+    // Replace loading message with the form or message
+    card.querySelector('.inline-form').remove();
     card.insertAdjacentHTML('beforeend', formHtml);
 
     card.querySelector('.cancel-btn').addEventListener('click', () => {
       card.innerHTML = originalContent;
     });
 
+    // Add submit listener only if the form was created
+    const bookingForm = card.querySelector('.booking-form-inline');
+    if (!bookingForm) return;
+
     card.querySelector('.booking-form-inline').addEventListener('submit', async (e) => {
       e.preventDefault();
       const formData = new FormData(e.target);
       const data = Object.fromEntries(formData.entries());
+      data.patientId = currentUser.id;
       data.mode = 'F'; // Assuming 'F' for offline/in-person
 
       const res = await fetch(`${API_BASE_URL}/appointments`, {
@@ -305,7 +485,7 @@ document.addEventListener('DOMContentLoaded', () => {
         document.getElementById('nav-appointments').click(); // Switch to appointments tab
       } else if (res.status === 409) {
         const errorData = await res.json();
-        alert(`Booking Failed: ${errorData.error}`);
+        alert(`Booking Failed: ${errorData.error}`); // e.g., slot just got booked
         // We don't restore the card here, so the user can try another time.
       } else {
         const errorData = await res.json();
@@ -368,17 +548,76 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
+  function showLabUploadForm(button) {
+    const card = button.closest('.appointment-card');
+    const labtestId = button.dataset.labtestId;
+    const originalContent = card.innerHTML;
+
+    const formHtml = `
+      <div class="inline-form">
+        <h4>Upload Lab Report</h4>
+        <form class="lab-upload-form">
+          <div class="form-group">
+            <label for="lab-date-${labtestId}">Test Date</label>
+            <input type="date" id="lab-date-${labtestId}" name="testDate" required>
+          </div>
+          <div class="form-group">
+            <label for="lab-result-${labtestId}">Result/Summary</label>
+            <textarea id="lab-result-${labtestId}" name="result" rows="3" placeholder="Enter summary of results or link to report." required></textarea>
+          </div>
+          <div class="inline-form-actions">
+            <button type="submit">Submit Report</button>
+            <button type="button" class="cancel-btn">Cancel</button>
+          </div>
+        </form>
+      </div>
+    `;
+
+    // Hide everything else in the card and show the form
+    card.innerHTML = formHtml;
+
+    card.querySelector('.cancel-btn').addEventListener('click', () => {
+      card.innerHTML = originalContent;
+    });
+
+    card.querySelector('.lab-upload-form').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const formData = new FormData(e.target);
+      const data = Object.fromEntries(formData.entries());
+
+      try {
+        const res = await fetch(`${API_BASE_URL}/labtests/${labtestId}/upload`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(data)
+        });
+        const result = await res.json();
+        alert(result.message || result.error);
+        if (res.ok) {
+          loadAppointments(); // Refresh the patient's appointment list
+        }
+      } catch (error) {
+        console.error('Error submitting lab report:', error);
+        alert('An error occurred while submitting the report.');
+      }
+    });
+  }
+
   // --- UI Initialization ---
   function initializeUI() {
     const navSearch = document.getElementById('nav-search');
     const navAppointments = document.getElementById('nav-appointments');
     const navDashboard = document.getElementById('nav-dashboard');
+    const navInbox = document.getElementById('nav-inbox');
+    const navProfile = document.getElementById('nav-profile');
 
     if (currentUser.type === 'patient') {
       navDashboard.remove(); // Remove doctor dashboard link
       searchView.classList.remove('hidden');
       loadSpecializations();
     } else if (currentUser.type === 'doctor') {
+      navInbox.remove();
+      navProfile.remove(); // Remove profile link for doctors for now
       navSearch.remove(); // Remove patient links
       navAppointments.remove();
       navDashboard.classList.add('active');
@@ -387,6 +626,30 @@ document.addEventListener('DOMContentLoaded', () => {
       doctorDashboardView.classList.remove('hidden');
       document.querySelector('.dashboard-header').innerHTML = `<h2>Appointments for ${currentUser.name}</h2>`;
       loadDoctorAppointments(currentUser.id);
+      showAddAvailabilityForm();
+
+      // Add event listener for the new form
+      document.getElementById('add-availability-form').addEventListener('submit', async (e) => {
+          e.preventDefault();
+          const formData = new FormData(e.target);
+          const data = Object.fromEntries(formData.entries());
+          data.doctorId = currentUser.id;
+
+          try {
+              const res = await fetch(`${API_BASE_URL}/availability`, {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify(data)
+              });
+              const result = await res.json();
+              alert(result.message || result.error);
+              if (res.ok) {
+                  e.target.reset(); // Clear the form on success
+              }
+          } catch (error) {
+              alert('An error occurred while adding availability.');
+          }
+      });
     }
   }
 

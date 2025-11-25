@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>My Profile - SymptoCare</title>
+    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="profile.css">
+</head>
+<body>
+    <header>
+        <h1>SymptoCare</h1>
+        <nav>
+            <!-- Navigation will be dynamically added by JS based on user type -->
+        </nav>
+    </header>
+
+    <div class="container profile-container">
+        <div id="profile-display-view">
+            <!-- Profile details will be loaded here by profile.js -->
+        </div>
+
+        <div id="edit-profile-view" class="hidden">
+            <h2>Edit Your Profile</h2>
+            <form id="edit-patient-form" class="profile-form">
+                <div class="form-group"><label for="edit-patient-name">Full Name</label><input type="text" id="edit-patient-name" required></div>
+                <div class="form-group"><label for="edit-patient-age">Age</label><input type="number" id="edit-patient-age" required></div>
+                <div class="form-group"><label for="edit-patient-gender">Gender</label><select id="edit-patient-gender" required><option value="M">Male</option><option value="F">Female</option><option value="O">Other</option></select></div>
+                <div class="form-group"><label for="edit-patient-phone">Phone Number</label><input type="tel" id="edit-patient-phone" required></div>
+                <div class="form-group"><label for="edit-patient-address">Address (Optional)</label><input type="text" id="edit-patient-address"></div>
+                <div class="form-actions">
+                    <button type="submit">Save Changes</button>
+                    <button type="button" id="cancel-edit-btn" class="cancel-btn">Cancel</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script src="profile.js"></script>
+</body>
+</html>

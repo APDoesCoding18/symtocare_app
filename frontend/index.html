@@ -3,8 +3,8 @@
 <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>SymptoCare — Find Doctors Nearby</title>
-    <link rel="stylesheet" href="styles.css" />
+    <title>SymptoCare — Smart Healthcare</title>
+    <link rel="stylesheet" href="style.css" />
 </head>
 <body>
     <header>
@@ -12,6 +12,8 @@
         <nav>
             <a href="#" id="nav-search" class="nav-link active">Search Doctors</a>
             <a href="#" id="nav-appointments" class="nav-link">My Appointments</a>
+            <a href="#" id="nav-inbox" class="nav-link">Inbox</a>
+            <a href="profile.html" id="nav-profile" class="nav-link">My Profile</a>
             <a href="#" id="nav-dashboard" class="nav-link">Doctor Dashboard</a>
             <a href="#" id="nav-logout" class="nav-link logout-btn">Logout</a>
         </nav>
@@ -48,7 +50,14 @@
 
         <!-- Appointments View -->
         <div id="appointments-view" class="hidden">
-            <!-- Appointments will be loaded here by script.js -->
+            <h2>My Appointments</h2>
+            <div id="patient-appointments-list"></div>
+        </div>
+
+        <!-- Inbox View -->
+        <div id="inbox-view" class="hidden">
+            <h2>My Inbox</h2>
+            <div id="inbox-messages-list"></div>
         </div>
 
         <!-- Doctor Dashboard View -->

@@ -1,0 +1,62 @@
+.profile-container {
+    max-width: 800px;
+    margin: 2rem auto;
+    padding: 2rem;
+    background: var(--card-bg);
+    border-radius: 8px;
+    box-shadow: 0 4px 15px var(--shadow-color);
+}
+
+.profile-details {
+    border-left: 5px solid var(--primary-color);
+    padding-left: 1.5rem;
+}
+
+.profile-details h2 {
+    color: var(--primary-color);
+    margin-bottom: 1.5rem;
+}
+
+.profile-details p {
+    font-size: 1.1rem;
+    margin-bottom: 1rem;
+    color: #555;
+}
+
+.profile-details p strong {
+    color: var(--text-color);
+    min-width: 150px;
+    display: inline-block;
+}
+
+.profile-actions {
+    margin-top: 2rem;
+    padding-top: 1.5rem;
+    border-top: 1px solid var(--border-color);
+    display: flex;
+    gap: 1rem;
+}
+
+.delete-btn {
+    background-image: none;
+    background-color: var(--error-color);
+}
+
+.delete-btn:hover {
+    background-color: #c82333;
+}
+
+.profile-form {
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+}
+
+.profile-form .form-group {
+    margin-bottom: 0;
+}
+
+.form-actions {
+    display: flex;
+    gap: 1rem;
+}
