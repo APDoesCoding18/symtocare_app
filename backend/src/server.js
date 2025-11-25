@@ -93,11 +93,16 @@ app.get('/api/appointments/doctor/:doctorId', async (req, res) => {
       lt.status as lab_test_status,
       lt.result as lab_test_result,
       lt.test_date as lab_test_date,
+      diag.diagnosis_id,
+      diag.diagnosis_summary,
+      diag.advice,
+      diag.follow_up_date,
       p.name as patient_name,
       p.phone_number as patient_phone
     FROM APPOINTMENT a
     JOIN PATIENT p ON a.patient_id = p.patient_id
     LEFT JOIN LAB_TEST lt ON a.appointment_id = lt.appointment_id
+    LEFT JOIN DIAGNOSIS diag ON a.appointment_id = diag.appointment_id
     WHERE a.doctor_id = ?
     AND a.status IN ('Confirmed', 'Completed')
     ORDER BY a.appointment_date ASC, a.time_slot ASC
@@ -190,10 +195,20 @@ app.get('/api/appointments', async (req, res) => {
       lt.labtest_id,
       lt.test_name,
       lt.status as lab_test_status,
+      diag.diagnosis_id,
+      diag.diagnosis_summary,
+      diag.advice,
+      diag.follow_up_date,
+      (
+        SELECT JSON_ARRAYAGG(JSON_OBJECT('medicine_name', med.medicine_name, 'dosage', med.dosage, 'duration', med.duration))
+        FROM PRESCRIPTION med
+        WHERE med.diagnosis_id = diag.diagnosis_id
+      ) as prescriptions,
       (SELECT rating_id FROM RATING r WHERE r.doctor_id = a.doctor_id AND r.patient_id = a.patient_id) IS NOT NULL AS has_rated
     FROM APPOINTMENT a
     JOIN DOCTOR d ON a.doctor_id = d.doctor_id
     LEFT JOIN LAB_TEST lt ON a.appointment_id = lt.appointment_id
+    LEFT JOIN DIAGNOSIS diag ON a.appointment_id = diag.appointment_id
     LEFT JOIN SPECIALIZATION s ON d.specialization_id = s.specialization_id
     WHERE a.patient_id = ?
     ORDER BY a.appointment_date DESC, a.time_slot DESC
@@ -476,6 +491,101 @@ app.put('/api/labtests/:labtestId/upload', async (req, res) => {
     } catch (err) {
         console.error('Error uploading lab report:', err);
         res.status(500).json({ error: 'Database error while submitting report.' });
+    }
+});
+
+// Endpoint for a doctor to mark an appointment as 'Completed'
+app.put('/api/appointments/:appointmentId/complete', async (req, res) => {
+    const { appointmentId } = req.params;
+    const connection = await pool.getConnection();
+    try {
+        await connection.beginTransaction();
+        const [result] = await connection.query(
+            "UPDATE APPOINTMENT SET status = 'Completed' WHERE appointment_id = ? AND status = 'Confirmed'",
+            [appointmentId]
+        );
+
+        if (result.affectedRows === 0) {
+            await connection.rollback();
+            return res.status(404).json({ error: 'Appointment not found or is not in "Confirmed" state.' });
+        }
+
+        // Notify patient
+        const [appDetails] = await connection.query('SELECT patient_id FROM APPOINTMENT WHERE appointment_id = ?', [appointmentId]);
+        const patientId = appDetails[0].patient_id;
+        const inboxMsg = `Your appointment (ID: ${appointmentId}) has been marked as completed by your doctor.`;
+        await connection.query('INSERT INTO PATIENT_INBOX (patient_id, Pmsg, received_at) VALUES (?, ?, NOW())', [patientId, inboxMsg]);
+
+        await connection.commit();
+        res.status(200).json({ message: 'Appointment marked as completed.' });
+    } catch (err) {
+        await connection.rollback();
+        console.error('Error completing appointment:', err);
+        res.status(500).json({ error: 'Database error.' });
+    } finally {
+        connection.release();
+    }
+});
+
+// Endpoint for a doctor to add a diagnosis
+app.post('/api/diagnosis', async (req, res) => {
+    const { appointmentId, diagnosisSummary, advice, followUpDate } = req.body;
+    if (!appointmentId || !diagnosisSummary) {
+        return res.status(400).json({ error: 'Appointment ID and diagnosis summary are required.' });
+    }
+
+    const connection = await pool.getConnection();
+    try {
+        await connection.beginTransaction();
+        const sql = 'INSERT INTO DIAGNOSIS (appointment_id, diagnosis_summary, advice, follow_up_date) VALUES (?, ?, ?, ?)';
+        const [result] = await connection.query(sql, [appointmentId, diagnosisSummary, advice || null, followUpDate || null]);
+
+        // Notify patient
+        const [appDetails] = await connection.query('SELECT patient_id FROM APPOINTMENT WHERE appointment_id = ?', [appointmentId]);
+        const patientId = appDetails[0].patient_id;
+        const inboxMsg = `Your doctor has added a diagnosis for your recent appointment. Please check your appointment details.`;
+        await connection.query('INSERT INTO PATIENT_INBOX (patient_id, Pmsg, received_at) VALUES (?, ?, NOW())', [patientId, inboxMsg]);
+
+        await connection.commit();
+        res.status(201).json({ message: 'Diagnosis added successfully.', diagnosis_id: result.insertId });
+    } catch (err) {
+        await connection.rollback();
+        console.error('Error adding diagnosis:', err);
+        res.status(500).json({ error: 'Database error or diagnosis already exists for this appointment.' });
+    } finally {
+        connection.release();
+    }
+});
+
+// Endpoint for a doctor to add prescriptions to a diagnosis
+app.post('/api/prescriptions', async (req, res) => {
+    const { diagnosisId, prescriptions } = req.body;
+    if (!diagnosisId || !prescriptions || !Array.isArray(prescriptions) || prescriptions.length === 0) {
+        return res.status(400).json({ error: 'Diagnosis ID and a list of prescriptions are required.' });
+    }
+
+    const connection = await pool.getConnection();
+    try {
+        await connection.beginTransaction();
+
+        const prescriptionValues = prescriptions.map(p => [diagnosisId, p.medicineName, p.dosage, p.duration]);
+        const sql = 'INSERT INTO PRESCRIPTION (diagnosis_id, medicine_name, dosage, duration) VALUES ?';
+        await connection.query(sql, [prescriptionValues]);
+
+        // Notify patient
+        const [diagDetails] = await connection.query('SELECT a.patient_id FROM DIAGNOSIS d JOIN APPOINTMENT a ON d.appointment_id = a.appointment_id WHERE d.diagnosis_id = ?', [diagnosisId]);
+        const patientId = diagDetails[0].patient_id;
+        const inboxMsg = `Your doctor has added a prescription to your recent diagnosis.`;
+        await connection.query('INSERT INTO PATIENT_INBOX (patient_id, Pmsg, received_at) VALUES (?, ?, NOW())', [patientId, inboxMsg]);
+
+        await connection.commit();
+        res.status(201).json({ message: 'Prescriptions added successfully.' });
+    } catch (err) {
+        await connection.rollback();
+        console.error('Error adding prescriptions:', err);
+        res.status(500).json({ error: 'Database error while adding prescriptions.' });
+    } finally {
+        connection.release();
     }
 });
 

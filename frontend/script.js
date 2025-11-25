@@ -136,6 +136,31 @@ document.addEventListener('DOMContentLoaded', () => {
             card.innerHTML += `<p class="lab-test-info submitted"><strong>Lab Test:</strong> Report Submitted</p>`;
         }
 
+        // Diagnosis and Prescription Section for Patient
+        if (appt.diagnosis_id) {
+            let diagnosisHtml = `
+                <div class="diagnosis-info">
+                    <h4>Diagnosis Details</h4>
+                    <p><strong>Summary:</strong> ${appt.diagnosis_summary}</p>
+                    <p><strong>Doctor's Advice:</strong> ${appt.advice || 'N/A'}</p>
+                    ${appt.follow_up_date ? `<p><strong>Follow-up Date:</strong> ${new Date(appt.follow_up_date).toLocaleDateString()}</p>` : ''}
+                </div>
+            `;
+
+            if (appt.prescriptions && appt.prescriptions.length > 0) {
+                diagnosisHtml += `
+                    <div class="prescription-info">
+                        <h4>Prescription</h4>
+                        <table>
+                            <tr><th>Medicine</th><th>Dosage</th><th>Duration</th></tr>
+                            ${appt.prescriptions.map(p => `<tr><td>${p.medicine_name}</td><td>${p.dosage}</td><td>${p.duration}</td></tr>`).join('')}
+                        </table>
+                    </div>
+                `;
+            }
+            card.innerHTML += diagnosisHtml;
+        }
+
         // Review Button
         if (appt.status === 'Completed' && !appt.has_rated) {
             card.innerHTML += `<button class="review-btn" data-doctor-id="${appt.doctor_id}" data-doctor-name="${appt.doctor_name}">Leave a Review</button>`;
@@ -209,11 +234,28 @@ document.addEventListener('DOMContentLoaded', () => {
                 card.innerHTML += `<button class="request-lab-btn" data-appointment-id="${appt.appointment_id}">Request Lab Report</button>`;
             }
         }
+
+        // Diagnosis Section for Doctor
+        if (appt.status === 'Completed') {
+            if (appt.diagnosis_id) {
+                card.innerHTML += `<div class="diagnosis-info">
+                    <p><strong>Diagnosis Added.</strong></p>
+                    <button class="add-prescription-btn" data-diagnosis-id="${appt.diagnosis_id}">Add Prescription</button>
+                </div>`;
+            } else {
+                card.innerHTML += `<button class="add-diagnosis-btn" data-appointment-id="${appt.appointment_id}">Add Diagnosis</button>`;
+            }
+        }
         // The cancel button should only show for appointments that are not yet completed or cancelled.
         if (appt.status === 'Confirmed' || appt.status === 'Pending') {
             card.innerHTML += `<button class="cancel-btn" data-appointment-id="${appt.appointment_id}">Cancel Appointment</button>`;
         }
         doctorAppointmentsList.appendChild(card);
+      });
+
+      // Add "Complete Appointment" button for confirmed appointments
+      appointments.filter(a => a.status === 'Confirmed').forEach(appt => {
+          document.querySelector(`.appointment-card:has([data-appointment-id="${appt.appointment_id}"])`).insertAdjacentHTML('beforeend', `<button class="complete-appt-btn" data-appointment-id="${appt.appointment_id}">Mark as Complete</button>`);
       });
 
     } catch (error) {
@@ -398,6 +440,21 @@ document.addEventListener('DOMContentLoaded', () => {
             resultDisplay.classList.add('hidden');
             button.textContent = 'View Report';
         }
+    } else if (event.target.classList.contains('complete-appt-btn')) { // Mark as Complete
+        if (!confirm('Are you sure you want to mark this appointment as completed?')) return;
+        const appointmentId = event.target.dataset.appointmentId;
+        try {
+            const res = await fetch(`${API_BASE_URL}/appointments/${appointmentId}/complete`, { method: 'PUT' });
+            const result = await res.json();
+            alert(result.message || result.error);
+            if (res.ok) loadDoctorAppointments(doctorSelect.value);
+        } catch (error) {
+            alert('An error occurred.');
+        }
+    } else if (event.target.classList.contains('add-diagnosis-btn')) { // Add Diagnosis
+        showDiagnosisForm(event.target);
+    } else if (event.target.classList.contains('add-prescription-btn')) { // Add Prescription
+        showPrescriptionForm(event.target);
     }
   });
 
@@ -599,6 +656,136 @@ document.addEventListener('DOMContentLoaded', () => {
       } catch (error) {
         console.error('Error submitting lab report:', error);
         alert('An error occurred while submitting the report.');
+      }
+    });
+  }
+
+  function showDiagnosisForm(button) {
+    const card = button.closest('.appointment-card');
+    const appointmentId = button.dataset.appointmentId;
+    const originalContent = card.innerHTML;
+
+    const formHtml = `
+      <div class="inline-form">
+        <h4>Add Diagnosis</h4>
+        <form class="diagnosis-form">
+          <div class="form-group">
+            <label for="diag-summary-${appointmentId}">Diagnosis Summary</label>
+            <textarea id="diag-summary-${appointmentId}" name="diagnosisSummary" rows="4" required></textarea>
+          </div>
+          <div class="form-group">
+            <label for="diag-advice-${appointmentId}">Advice</label>
+            <textarea id="diag-advice-${appointmentId}" name="advice" rows="3"></textarea>
+          </div>
+          <div class="form-group">
+            <label for="diag-followup-${appointmentId}">Follow-up Date</label>
+            <input type="date" id="diag-followup-${appointmentId}" name="followUpDate">
+          </div>
+          <div class="inline-form-actions">
+            <button type="submit">Save Diagnosis</button>
+            <button type="button" class="cancel-btn">Cancel</button>
+          </div>
+        </form>
+      </div>
+    `;
+    card.innerHTML = formHtml;
+
+    card.querySelector('.cancel-btn').addEventListener('click', () => card.innerHTML = originalContent);
+
+    card.querySelector('.diagnosis-form').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const formData = new FormData(e.target);
+      const data = Object.fromEntries(formData.entries());
+      data.appointmentId = appointmentId;
+
+      try {
+        const res = await fetch(`${API_BASE_URL}/diagnosis`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(data)
+        });
+        const result = await res.json();
+        alert(result.message || result.error);
+        if (res.ok) loadDoctorAppointments(doctorSelect.value);
+      } catch (error) {
+        alert('An error occurred while saving the diagnosis.');
+      }
+    });
+  }
+
+  function showPrescriptionForm(button) {
+    const card = button.closest('.appointment-card');
+    const diagnosisId = button.dataset.diagnosisId;
+    const originalContent = card.innerHTML;
+
+    const formHtml = `
+      <div class="inline-form">
+        <h4>Add Prescription</h4>
+        <form class="prescription-form">
+          <div id="medicines-container">
+            <div class="medicine-entry">
+              <input type="text" name="medicineName" placeholder="Medicine Name" required>
+              <input type="text" name="dosage" placeholder="Dosage (e.g., 1-0-1)" required>
+              <input type="text" name="duration" placeholder="Duration (e.g., 5 days)" required>
+            </div>
+          </div>
+          <button type="button" id="add-medicine-btn">Add Another Medicine</button>
+          <div class="inline-form-actions">
+            <button type="submit">Save Prescription</button>
+            <button type="button" class="cancel-btn">Cancel</button>
+          </div>
+        </form>
+      </div>
+    `;
+    card.innerHTML = formHtml;
+
+    card.querySelector('.cancel-btn').addEventListener('click', () => card.innerHTML = originalContent);
+
+    card.querySelector('#add-medicine-btn').addEventListener('click', () => {
+        const container = card.querySelector('#medicines-container');
+        const newEntry = document.createElement('div');
+        newEntry.className = 'medicine-entry';
+        newEntry.innerHTML = `
+            <input type="text" name="medicineName" placeholder="Medicine Name" required>
+            <input type="text" name="dosage" placeholder="Dosage (e.g., 1-0-1)" required>
+            <input type="text" name="duration" placeholder="Duration (e.g., 5 days)" required>
+        `;
+        container.appendChild(newEntry);
+    });
+
+    card.querySelector('.prescription-form').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const entries = e.target.querySelectorAll('.medicine-entry');
+      const prescriptions = Array.from(entries).map(entry => ({
+          medicineName: entry.querySelector('[name="medicineName"]').value,
+          dosage: entry.querySelector('[name="dosage"]').value,
+          duration: entry.querySelector('[name="duration"]').value,
+      }));
+
+      if (prescriptions.some(p => !p.medicineName || !p.dosage || !p.duration)) {
+          alert('Please fill out all fields for each medicine.');
+          return;
+      }
+
+      const data = { diagnosisId, prescriptions };
+
+      try {
+        const res = await fetch(`${API_BASE_URL}/prescriptions`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(data)
+        });
+        const result = await res.json();
+        alert(result.message || result.error);
+        if (res.ok) {
+            card.innerHTML = originalContent; // Restore original card view
+            // Optionally, just update the button text or state
+            const diagInfo = card.querySelector('.diagnosis-info');
+            if (diagInfo) diagInfo.innerHTML += '<p><em>Prescription added.</em></p>';
+            button.remove(); // Remove the "Add Prescription" button
+        }
+      } catch (error) {
+        alert('An error occurred while saving the prescription.');
       }
     });
   }
